@@ -34,9 +34,22 @@
           Word Frequency Analyzer
         </h1>
         <button id="loginBtn" class="secondary-btn small" title="Login with Email OTP">Passwordless Login</button>
-        <div id="userProfile" style="display: none; align-items: center; gap: 10px;">
-          <span id="userEmail" class="user-email"></span>
-          <button id="logoutBtn" class="secondary-btn small">Logout</button>
+        <div id="userProfile" class="user-menu" style="display: none;">
+          <button id="menuToggle" class="menu-icon" title="User menu">⋮</button>
+          <div id="userDropdown" class="dropdown-menu" style="display: none;">
+            <div class="dropdown-header">
+              <span class="dropdown-email" id="userEmail"></span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <button id="syncBtn" class="dropdown-item">
+              <span class="dropdown-icon">🔄</span>
+              <span>Sync Data</span>
+            </button>
+            <button id="logoutBtn" class="dropdown-item">
+              <span class="dropdown-icon">🚪</span>
+              <span>Logout</span>
+            </button>
+          </div>
         </div>
       </div>
       <p class="tagline">Learn Vocabulary from Books - Analyze Word Frequency</p>
@@ -174,9 +187,28 @@
       <span class="toast-message" id="errorMessage"></span>
     </div>
 
-    <footer class="footer" style="text-align: center; margin-top: 4rem; padding-bottom: 2rem;">
-      <button id="feedbackBtn" class="link-btn">Give Feedback</button>
-      <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">Version 1.0.0</p>
+
+    <!-- Professional Footer -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <div class="footer-left">
+          <span class="footer-copy">© 2026 Word Frequency Analyzer</span>
+          <span class="footer-separator">•</span>
+          <span class="footer-version">v1.0.0</span>
+        </div>
+        <div class="footer-right">
+          <button id="footerFeedbackBtn" class="footer-link">
+            <span>💬</span> Feedback
+          </button>
+          <a href="https://github.com/yourusername/word-frequency-app" target="_blank" class="footer-link"
+            rel="noopener">
+            <span>📂</span> GitHub
+          </a>
+          <a href="#" class="footer-link" id="aboutLink">
+            <span>ℹ️</span> About
+          </a>
+        </div>
+      </div>
     </footer>
   </div>
 

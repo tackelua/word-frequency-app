@@ -914,6 +914,49 @@ loginBtn.addEventListener('click', () => {
 closeLoginBtn.addEventListener('click', () => loginModal.style.display = 'none');
 logoutBtn.addEventListener('click', logout);
 
+// Dropdown menu toggle
+const menuToggle = document.getElementById('menuToggle');
+const userDropdown = document.getElementById('userDropdown');
+const syncBtn = document.getElementById('syncBtn');
+
+if (menuToggle) {
+    menuToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isVisible = userDropdown.style.display === 'block';
+        userDropdown.style.display = isVisible ? 'none' : 'block';
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!userProfile.contains(e.target)) {
+            userDropdown.style.display = 'none';
+        }
+    });
+
+    // Sync button
+    if (syncBtn) {
+        syncBtn.addEventListener('click', async () => {
+            userDropdown.style.display = 'none';
+            const originalIcon = '🔄';
+            syncBtn.innerHTML = '<span class="dropdown-icon">⏳</span><span>Syncing...</span>';
+
+            try {
+                await syncData();
+                syncBtn.innerHTML = '<span class="dropdown-icon">✅</span><span>Synced!</span>';
+                showSuccess('Data synced successfully!');
+            } catch (e) {
+                syncBtn.innerHTML = '<span class="dropdown-icon">❌</span><span>Sync Failed</span>';
+                showError('Sync failed');
+            }
+
+            setTimeout(() => {
+                syncBtn.innerHTML = '<span class="dropdown-icon">🔄</span><span>Sync Data</span>';
+            }, 2000);
+        });
+    }
+}
+
+
 sendOtpBtn.addEventListener('click', async () => {
     const email = emailInput.value.trim();
     if (!email) return showError('Please enter email');
@@ -1110,7 +1153,8 @@ window.handleSRS = function (rating) {
 // ==========================================
 // Feedback System
 // ==========================================
-const feedbackBtn = document.getElementById('feedbackBtn');
+const feedbackBtn = document.getElementById('feedbackBtn'); // Legacy (if exists)
+const footerFeedbackBtn = document.getElementById('footerFeedbackBtn');
 const feedbackModal = document.getElementById('feedbackModal');
 const closeFeedbackBtn = document.getElementById('closeFeedbackBtn');
 const submitFeedbackBtn = document.getElementById('submitFeedbackBtn');
@@ -1118,14 +1162,23 @@ const fbType = document.getElementById('fbType');
 const fbContent = document.getElementById('fbContent');
 const fbEmail = document.getElementById('fbEmail');
 
-if (feedbackBtn) {
-    feedbackBtn.addEventListener('click', () => {
-        feedbackModal.style.display = 'flex';
-        if (currentUser && currentUser.email) {
-            fbEmail.value = currentUser.email;
-        }
-    });
+// Open feedback modal handler
+function openFeedbackModal() {
+    feedbackModal.style.display = 'flex';
+    if (currentUser && currentUser.email) {
+        fbEmail.value = currentUser.email;
+    }
+}
 
+if (feedbackBtn) {
+    feedbackBtn.addEventListener('click', openFeedbackModal);
+}
+
+if (footerFeedbackBtn) {
+    footerFeedbackBtn.addEventListener('click', openFeedbackModal);
+}
+
+if (closeFeedbackBtn) {
     closeFeedbackBtn.addEventListener('click', () => feedbackModal.style.display = 'none');
 
     submitFeedbackBtn.addEventListener('click', async () => {
