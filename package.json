@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "stop": "lsof -ti:3000 | xargs kill -9 || echo 'No process on port 3000'"
   },
   "keywords": [
     "word-frequency",

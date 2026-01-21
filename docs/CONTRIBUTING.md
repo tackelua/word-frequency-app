@@ -14,8 +14,8 @@ Thank you for your interest in contributing! 🎉
 1. Fork the repository
 2. Clone your fork:
 ```bash
-git clone https://github.com/YOUR_USERNAME/word-frequency-app.git
-cd word-frequency-app
+git clone https://github.com/YOUR_USERNAME/word-frequency-analyzer.git
+cd word-frequency-analyzer
 ```
 
 3. Install dependencies:
@@ -143,7 +143,7 @@ var analyzeText = function(text){
 ## Project Structure
 
 ```
-word-frequency-app/
+word-frequency-analyzer/
 ├── server.js           # Express server
 ├── src/                # Backend code
 │   ├── analyzer.js     # Text analysis

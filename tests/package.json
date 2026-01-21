@@ -1,5 +1,5 @@
 {
-    "name": "word-frequency-app-tests",
+    "name": "word-frequency-analyzer-tests",
     "version": "1.0.0",
     "description": "Automated tests for Word Frequency Analyzer",
     "scripts": {

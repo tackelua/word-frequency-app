@@ -230,7 +230,7 @@ server {
 npm install -g pm2
 
 # Start app
-pm2 start server.js --name word-frequency-app
+pm2 start server.js --name word-frequency-analyzer
 
 # Auto-restart on reboot
 pm2 startup

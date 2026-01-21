@@ -63,11 +63,13 @@ function analyzeWordFrequency(text, options = {}) {
     frequencyMap.set(word, (frequencyMap.get(word) || 0) + 1);
   }
 
-  // Get top words to find context for
-  const topWords = Array.from(frequencyMap.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, maxResults)
-    .map(([word]) => word);
+  // Get top words to find context for (limit to 1000 for performance)
+  let topWords = Array.from(frequencyMap.entries())
+    .sort((a, b) => b[1] - a[1]);
+
+  // Use maxResults if finite, otherwise extract context for all words
+  const contextLimit = isFinite(maxResults) ? maxResults : frequencyMap.size;
+  topWords = topWords.slice(0, contextLimit).map(([word]) => word);
 
   const wordContexts = new Map();
 
@@ -87,8 +89,8 @@ function analyzeWordFrequency(text, options = {}) {
             wordContexts.set(word, []);
           }
           const contexts = wordContexts.get(word);
-          // Limit to 3 examples per word to keep payload size down
-          if (contexts.length < 3) {
+          // Limit to 5 examples per word
+          if (contexts.length < 5) {
             contexts.push(sentence.trim());
           }
         }
@@ -97,15 +99,19 @@ function analyzeWordFrequency(text, options = {}) {
   }
 
   // Convert to array and sort by frequency
-  const results = Array.from(frequencyMap.entries())
+  let results = Array.from(frequencyMap.entries())
     .map(([word, count]) => ({
       word,
       count,
       percentage: ((count / totalWords) * 100).toFixed(2),
       context: wordContexts.get(word) || []
     }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, maxResults);
+    .sort((a, b) => b.count - a.count);
+
+  // Only slice if maxResults is finite
+  if (isFinite(maxResults) && maxResults > 0) {
+    results = results.slice(0, maxResults);
+  }
 
   return {
     results,

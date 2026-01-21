@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage,
-    limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit for large books
+    limits: { fileSize: Infinity }, // No file size limit
     fileFilter: (req, file, cb) => {
         const allowedTypes = [
             'application/pdf',
@@ -79,8 +79,10 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         const fileName = req.file.originalname;
 
         // Parse file
-        console.log(`Parsing file: ${fileName}`);
+        const parseStart = Date.now();
+        console.log(`📄 Parsing file: ${fileName}...`);
         const text = await parseFile(filePath, req.file.mimetype);
+        console.log(`✓ Parsed in ${((Date.now() - parseStart) / 1000).toFixed(2)}s`);
 
         if (!text || text.trim().length === 0) {
             // Clean up uploaded file
@@ -89,13 +91,15 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         }
 
         // Analyze word frequency
-        console.log(`Analyzing word frequency...`);
+        const analyzeStart = Date.now();
+        console.log(`📊 Analyzing word frequency...`);
         const analysis = analyzeWordFrequency(text, {
             minLength: 3,  // Minimum 3 letters for meaningful vocabulary
-            maxResults: 500,  // Up to 500 words for vocabulary learning
+            maxResults: Infinity,  // No limit on results
             caseSensitive: false,
             includeStopwords: false
         });
+        console.log(`✓ Analyzed ${analysis.uniqueWords} unique words in ${((Date.now() - analyzeStart) / 1000).toFixed(2)}s`);
 
         // Clean up uploaded file
         fs.unlinkSync(filePath);

@@ -70,7 +70,7 @@ async function processFiles(files) {
     // Filter valid files
     const validFiles = files.filter(file => {
         const ext = file.name.split('.').pop().toLowerCase();
-        return allowedExts.includes(ext) && file.size <= 100 * 1024 * 1024;
+        return allowedExts.includes(ext); // No size limit
     });
 
     if (validFiles.length === 0) {
@@ -82,24 +82,35 @@ async function processFiles(files) {
     uploadProgress.style.display = 'block';
 
     let completed = 0;
+    const startTime = Date.now();
+
     const updateProgress = () => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
         document.querySelector('.progress-text').textContent =
-            `Analyzing ${completed}/${validFiles.length} documents...`;
+            `Analyzing ${completed}/${validFiles.length} documents... (${elapsed}s)`;
     };
     updateProgress();
 
+    console.log(`📤 Starting parallel upload of ${validFiles.length} files...`);
+
     try {
         await Promise.all(validFiles.map(async (file) => {
+            const fileStartTime = Date.now();
             try {
                 await uploadSingleFile(file);
+                const fileTime = ((Date.now() - fileStartTime) / 1000).toFixed(2);
+                console.log(`✅ ${file.name} processed in ${fileTime}s`);
             } catch (err) {
-                console.error(`Failed to process ${file.name}:`, err);
+                console.error(`❌ Failed to process ${file.name}:`, err);
                 showError(`Failed to process ${file.name}`);
             } finally {
                 completed++;
                 updateProgress();
             }
         }));
+
+        const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`🎉 All ${validFiles.length} files processed in ${totalTime}s`);
 
         showResults();
 
@@ -269,7 +280,7 @@ function updateStats() {
 }
 
 function getAggregatedData() {
-    const wordMap = new Map();
+    const wordMap = new Map(); // word -> { count, context[] }
     let totalWords = 0;
 
     // Aggregate selected files only
@@ -277,17 +288,32 @@ function getAggregatedData() {
         if (!selectedFiles.has(fileName)) return;
 
         file.analysis.results.forEach(item => {
-            const existing = wordMap.get(item.word) || 0;
-            wordMap.set(item.word, existing + item.count);
+            const existing = wordMap.get(item.word);
+            if (existing) {
+                existing.count += item.count;
+                // Merge contexts (up to 5 total)
+                if (item.context && item.context.length > 0) {
+                    const spaceLeft = 5 - existing.context.length;
+                    if (spaceLeft > 0) {
+                        existing.context.push(...item.context.slice(0, spaceLeft));
+                    }
+                }
+            } else {
+                wordMap.set(item.word, {
+                    count: item.count,
+                    context: item.context ? [...item.context] : []
+                });
+            }
             totalWords += item.count;
         });
     });
 
     let results = Array.from(wordMap.entries())
-        .map(([word, count]) => ({
+        .map(([word, data]) => ({
             word,
-            count,
-            percentage: totalWords > 0 ? ((count / totalWords) * 100).toFixed(2) : '0.00'
+            count: data.count,
+            context: data.context,
+            percentage: totalWords > 0 ? ((data.count / totalWords) * 100).toFixed(2) : '0.00'
         }))
         .sort((a, b) => b.count - a.count);
 
@@ -296,7 +322,7 @@ function getAggregatedData() {
         results = results.filter(item => savedWords.includes(item.word));
     }
 
-    results = results.slice(0, 500);
+    // No limit on results - show all words
 
     return {
         results,
