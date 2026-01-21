@@ -43,8 +43,7 @@ function init() {
 uploadZone.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) handleFileUpload(file);
+    if (fileInput.files.length) processFiles(Array.from(fileInput.files));
 });
 
 uploadZone.addEventListener('dragover', (e) => {
@@ -59,63 +58,82 @@ uploadZone.addEventListener('dragleave', () => {
 uploadZone.addEventListener('drop', (e) => {
     e.preventDefault();
     uploadZone.classList.remove('dragover');
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileUpload(file);
+    if (e.dataTransfer.files.length) processFiles(Array.from(e.dataTransfer.files));
 });
 
 // ==========================================
 // File Upload & Analysis
 // ==========================================
-async function handleFileUpload(file) {
+async function processFiles(files) {
     const allowedExts = ['pdf', 'docx', 'doc', 'txt', 'csv'];
-    const ext = file.name.split('.').pop().toLowerCase();
 
-    if (!allowedExts.includes(ext)) {
-        showError(`Unsupported file type. Allowed: ${allowedExts.join(', ')}`);
-        return;
-    }
+    // Filter valid files
+    const validFiles = files.filter(file => {
+        const ext = file.name.split('.').pop().toLowerCase();
+        return allowedExts.includes(ext) && file.size <= 100 * 1024 * 1024;
+    });
 
-    if (file.size > 100 * 1024 * 1024) {
-        showError('File size exceeds 100MB limit');
+    if (validFiles.length === 0) {
+        showError(`Unsupported files or file too large. Allowed: ${allowedExts.join(', ')}`);
         return;
     }
 
     uploadZone.style.display = 'none';
     uploadProgress.style.display = 'block';
 
+    let completed = 0;
+    const updateProgress = () => {
+        document.querySelector('.progress-text').textContent =
+            `Analyzing ${completed}/${validFiles.length} documents...`;
+    };
+    updateProgress();
+
     try {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to process file');
-        }
-
-        const data = await response.json();
-
-        filesData[data.fileName] = {
-            fileName: data.fileName,
-            analysis: data.analysis,
-            uploadedAt: new Date().toISOString()
-        };
-        saveFilesData();
-
-        // Auto-select new file
-        selectedFiles.add(data.fileName);
+        await Promise.all(validFiles.map(async (file) => {
+            try {
+                await uploadSingleFile(file);
+            } catch (err) {
+                console.error(`Failed to process ${file.name}:`, err);
+                showError(`Failed to process ${file.name}`);
+            } finally {
+                completed++;
+                updateProgress();
+            }
+        }));
 
         showResults();
 
     } catch (error) {
-        console.error('Upload error:', error);
-        showError(error.message || 'Failed to process file');
+        console.error('Batch processing error:', error);
         resetUpload();
     }
+}
+
+async function uploadSingleFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to process file');
+    }
+
+    const data = await response.json();
+
+    filesData[data.fileName] = {
+        fileName: data.fileName,
+        analysis: data.analysis,
+        uploadedAt: new Date().toISOString()
+    };
+    saveFilesData();
+
+    // Auto-select new file
+    selectedFiles.add(data.fileName);
 }
 
 // ==========================================
@@ -497,6 +515,8 @@ function showError(message) {
 }
 
 function resetUpload() {
+    resultsSection.style.display = 'none';
+    uploadCard.style.display = 'block';
     uploadZone.style.display = 'block';
     uploadProgress.style.display = 'none';
     fileInput.value = '';
