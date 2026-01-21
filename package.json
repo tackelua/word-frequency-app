@@ -1,0 +1,20 @@
+{
+  "name": "word-frequency-analyzer",
+  "version": "1.0.0",
+  "description": "Modern web app for analyzing word frequency in documents",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "keywords": ["word-frequency", "text-analysis", "pdf", "docx"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.6.0",
+    "csv-parse": "^5.5.3"
+  }
+}
