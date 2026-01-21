@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .admin-table th,
+        .admin-table td {
+            text-align: left;
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .admin-table th {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .badge.bug {
+            background: rgba(245, 87, 108, 0.2);
+            color: #f5576c;
+        }
+
+        .badge.feature {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+        }
+
+        .badge.general {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="bg-gradient"></div>
+    <div class="container">
+        <header class="header">
+            <h1 class="logo">Admin Dashboard</h1>
+            <a href="/" class="secondary-btn small">Back to App</a>
+        </header>
+
+        <div class="glass-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>User Feedback</h2>
+                <button id="refreshBtn" class="secondary-btn small">Refresh</button>
+            </div>
+            <div id="loading" style="padding: 2rem; text-align: center; color: var(--text-muted);">Loading...</div>
+            <div id="error" style="padding: 2rem; text-align: center; color: #f5576c; display: none;">Access Denied or
+                Error</div>
+
+            <table class="admin-table" id="fbTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>User/Email</th>
+                        <th>Content</th>
+                    </tr>
+                </thead>
+                <tbody id="fbBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('wfa_token');
+        const fbBody = document.getElementById('fbBody');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const fbTable = document.getElementById('fbTable');
+
+        async function loadFeedback() {
+            loading.style.display = 'block';
+            fbTable.style.display = 'none';
+            error.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/feedback', {
+                    headers: { 'Authorization': \`Bearer \${token}\` }
+                });
+
+                if (!res.ok) throw new Error(res.status);
+
+                const data = await res.json();
+                renderTable(data);
+                loading.style.display = 'none';
+                fbTable.style.display = 'table';
+            } catch (e) {
+                console.error(e);
+                loading.style.display = 'none';
+                error.style.display = 'block';
+                if (e.message === '403') {
+                    error.textContent = 'Access Denied. Admin only.';
+                }
+            }
+        }
+
+        function renderTable(data) {
+            fbBody.innerHTML = data.map(item => \`
+                <tr>
+                    <td>\${new Date(item.createdAt).toLocaleDateString()}</td>
+                    <td><span class="badge \${item.type}">\${item.type}</span></td>
+                    <td>\${item.email || (item.User ? item.User.email : 'Anonymous')}</td>
+                    <td>\${item.content}</td>
+                </tr>
+            \`).join('');
+        }
+
+        document.getElementById('refreshBtn').addEventListener('click', loadFeedback);
+        
+        // Init
+        if (!token) {
+            loading.style.display = 'none';
+            error.textContent = 'Please login as Admin first.';
+            error.style.display = 'block';
+        } else {
+            loadFeedback();
+        }
+    </script>
+</body>
+
+</html>

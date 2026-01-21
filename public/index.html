@@ -28,10 +28,17 @@
   <div class="container">
     <!-- Header -->
     <header class="header">
-      <h1 class="logo">
-        <span class="logo-icon">📊</span>
-        Word Frequency Analyzer
-      </h1>
+      <div class="header-top">
+        <h1 class="logo">
+          <span class="logo-icon">📊</span>
+          Word Frequency Analyzer
+        </h1>
+        <button id="loginBtn" class="secondary-btn small" title="Login with Email OTP">Passwordless Login</button>
+        <div id="userProfile" style="display: none; align-items: center; gap: 10px;">
+          <span id="userEmail" class="user-email"></span>
+          <button id="logoutBtn" class="secondary-btn small">Logout</button>
+        </div>
+      </div>
       <p class="tagline">Learn Vocabulary from Books - Analyze Word Frequency</p>
     </header>
 
@@ -73,11 +80,11 @@
           </div>
         </div>
 
-        <div class="glass-card stat-card">
+        <div class="glass-card stat-card" id="savedCard" style="cursor: pointer;" title="Click to practice">
           <div class="stat-icon">⭐</div>
           <div class="stat-content">
             <h3 class="stat-value" id="savedCount">0</h3>
-            <p class="stat-label">Saved Words</p>
+            <p class="stat-label">Saved Words (Review)</p>
           </div>
         </div>
       </div>
@@ -111,7 +118,7 @@
                 <th class="col-word sortable active" data-sort="word">Word</th>
                 <th class="col-count sortable" data-sort="count">Count</th>
                 <th class="col-pct sortable" data-sort="percentage">%</th>
-                <th class="col-save clickable" id="saveHeader" title="Click to show saved words only">Save</th>
+                <th class="col-actions">Actions</th>
               </tr>
             </thead>
             <tbody id="tableBody">
@@ -129,10 +136,109 @@
       </div>
     </section>
 
+    <!-- Flashcards Section -->
+    <section class="flashcards-section" id="flashcardsSection" style="display: none;">
+      <div class="glass-card flashcard-container">
+        <div class="flashcard-header">
+          <h2>Vocabulary Review</h2>
+          <button id="closeFlashcardsBtn" class="secondary-btn">Close</button>
+        </div>
+
+        <div id="flashcard" class="flashcard">
+          <div class="flashcard-inner">
+            <div class="flashcard-front">
+              <h3 id="fcWord">Word</h3>
+              <p class="fc-hint">Click to flip</p>
+            </div>
+            <div class="flashcard-back">
+              <div id="fcDefinition" class="fc-content">Definition</div>
+              <div id="fcContext" class="fc-context">Context example</div>
+              <div class="fc-actions">
+                <button class="srs-btn hard" onclick="handleSRS('hard')">Hard (1m)</button>
+                <button class="srs-btn good" onclick="handleSRS('good')">Good (10m)</button>
+                <button class="srs-btn easy" onclick="handleSRS('easy')">Easy (4d)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="fc-progress">
+          <span id="fcProgressText">0 words to review</span>
+        </div>
+      </div>
+    </section>
+
     <!-- Error Toast -->
     <div class="toast error-toast" id="errorToast" style="display: none;">
       <span class="toast-icon">⚠️</span>
       <span class="toast-message" id="errorMessage"></span>
+    </div>
+
+    <footer class="footer" style="text-align: center; margin-top: 4rem; padding-bottom: 2rem;">
+      <button id="feedbackBtn" class="link-btn">Give Feedback</button>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">Version 1.0.0</p>
+    </footer>
+  </div>
+
+  <!-- Context Modal -->
+  <div class="modal-overlay" id="contextModal" style="display: none;">
+    <div class="glass-card modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Context: <span id="contextWord" class="highlight-text">word</span></h3>
+        <button class="close-btn" id="closeModalBtn">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="contextSentences" class="context-list">
+          <!-- Dynamic sentences -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Modal -->
+  <div class="modal-overlay" id="loginModal" style="display: none;">
+    <div class="glass-card modal-content micro-modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Login / Register</h3>
+        <button class="close-btn" id="closeLoginBtn">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="loginStep1">
+          <p class="modal-desc">Enter your email to receive a login code.</p>
+          <input type="email" id="emailInput" class="input-field" placeholder="name@example.com">
+          <button id="sendOtpBtn" class="primary-btn full-width">Send Code</button>
+        </div>
+
+        <div id="loginStep2" style="display: none;">
+          <p class="modal-desc">Enter the code sent to <b id="otpEmailDisplay"></b></p>
+          <input type="text" id="otpInput" class="input-field" placeholder="123456" maxlength="6">
+          <button id="verifyOtpBtn" class="primary-btn full-width">Verify & Login</button>
+          <button id="backToEmailBtn" class="link-btn">Back</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feedback Modal -->
+  <div class="modal-overlay" id="feedbackModal" style="display: none;">
+    <div class="glass-card modal-content micro-modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Send Feedback</h3>
+        <button class="close-btn" id="closeFeedbackBtn">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Help us improve the app!</p>
+        <select id="fbType" class="input-field">
+          <option value="general">General</option>
+          <option value="bug">Report a Bug</option>
+          <option value="feature">Feature Request</option>
+        </select>
+        <textarea id="fbContent" class="input-field" rows="4" placeholder="Your message..."></textarea>
+        <!-- Media Upload -->
+        <input type="file" id="fbMedia" class="input-field" accept="image/*,video/*" multiple>
+        <input type="email" id="fbEmail" class="input-field" placeholder="Email (optional)">
+        <button id="submitFeedbackBtn" class="primary-btn full-width">Submit</button>
+      </div>
     </div>
   </div>
 

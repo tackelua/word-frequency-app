@@ -16,7 +16,7 @@ A modern web app to help language learners analyze books/documents, extract high
 - [ ] **Context Viewer**: Show the original sentence/paragraph where the word appears in the book.
 - [ ] **Instant Lookups**: Popup translation & auto-pronunciation (TTS) on hover/click.
 - [ ] **Flashcards & SRS**: Built-in Spaced Repetition System for vocabulary review.
-- [ ] **Anki Integration**: Export saved words to `.apkg` format.
+<!-- - [ ] **Anki Integration**: Export saved words to `.apkg` format. -->
 
 ### System & UX (Planned)
 - [ ] **Mobile Optimization**: Complete responsive design for learning on the go.

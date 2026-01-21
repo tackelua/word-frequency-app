@@ -18,6 +18,8 @@ const STOPWORDS = new Set([
   'new', 'want', 'because', 'any', 'these', 'give', 'day', 'most', 'us'
 ]);
 
+const natural = require('natural');
+
 /**
  * Analyzes word frequency in text
  * @param {string} text - The text to analyze
@@ -32,10 +34,18 @@ function analyzeWordFrequency(text, options = {}) {
     includeStopwords = false
   } = options;
 
-  // Convert to lowercase unless case sensitive
-  const processedText = caseSensitive ? text : text.toLowerCase();
+  // Preprocess text to handle PDF line breaks
+  // Replace single newlines with spaces, keep double newlines as paragraph breaks
+  const sanitizedText = text.replace(/(?<!\n)\n(?!\n)/g, ' ');
 
-  // Tokenize: split by non-word characters
+  // Tokenize sentences first to preserve context
+  const tokenizer = new natural.SentenceTokenizer();
+  const sentences = tokenizer.tokenize(sanitizedText);
+
+  // Convert to lowercase unless case sensitive
+  const processedText = caseSensitive ? sanitizedText : sanitizedText.toLowerCase();
+
+  // Tokenize words
   const words = processedText.match(/\b[a-zA-Z]+\b/g) || [];
 
   // Count frequency
@@ -45,7 +55,7 @@ function analyzeWordFrequency(text, options = {}) {
   for (const word of words) {
     // Filter by length
     if (word.length < minLength) continue;
-    
+
     // Filter stopwords
     if (!includeStopwords && STOPWORDS.has(word)) continue;
 
@@ -53,12 +63,46 @@ function analyzeWordFrequency(text, options = {}) {
     frequencyMap.set(word, (frequencyMap.get(word) || 0) + 1);
   }
 
+  // Get top words to find context for
+  const topWords = Array.from(frequencyMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxResults)
+    .map(([word]) => word);
+
+  const wordContexts = new Map();
+
+  // Find contexts (sentences) for top words
+  // Optimization: Single pass through sentences for top words only
+  if (sentences && sentences.length > 0) {
+    const topWordsSet = new Set(topWords);
+
+    for (const sentence of sentences) {
+      const sentenceLower = caseSensitive ? sentence : sentence.toLowerCase();
+      // quick check if sentence contains any of our words
+      const wordsInSentence = sentenceLower.match(/\b[a-zA-Z]+\b/g) || [];
+
+      for (const word of wordsInSentence) {
+        if (topWordsSet.has(word)) {
+          if (!wordContexts.has(word)) {
+            wordContexts.set(word, []);
+          }
+          const contexts = wordContexts.get(word);
+          // Limit to 3 examples per word to keep payload size down
+          if (contexts.length < 3) {
+            contexts.push(sentence.trim());
+          }
+        }
+      }
+    }
+  }
+
   // Convert to array and sort by frequency
   const results = Array.from(frequencyMap.entries())
     .map(([word, count]) => ({
       word,
       count,
-      percentage: ((count / totalWords) * 100).toFixed(2)
+      percentage: ((count / totalWords) * 100).toFixed(2),
+      context: wordContexts.get(word) || []
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, maxResults);

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -6,7 +7,7 @@ const { parseFile } = require('./src/parsers');
 const { analyzeWordFrequency } = require('./src/analyzer');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -49,6 +50,18 @@ const upload = multer({
 // Serve static files
 app.use(express.static('public'));
 app.use(express.json());
+
+// Routes
+const authRoutes = require('./src/routes/auth');
+const userRoutes = require('./src/routes/user_words');
+const feedbackRoutes = require('./src/routes/feedback');
+
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/feedback', feedbackRoutes);
+
+// Initialize DB
+const { sequelize } = require('./src/models'); // This will sync tables
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

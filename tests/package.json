@@ -1,0 +1,21 @@
+{
+    "name": "word-frequency-app-tests",
+    "version": "1.0.0",
+    "description": "Automated tests for Word Frequency Analyzer",
+    "scripts": {
+        "test": "node phase5-verification.js",
+        "test:headless": "HEADLESS=true node phase5-verification.js",
+        "test:debug": "DEBUG=true node phase5-verification.js",
+        "install": "npm install && npx playwright install chromium"
+    },
+    "keywords": [
+        "testing",
+        "playwright",
+        "e2e"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "playwright": "^1.40.0"
+    }
+}
