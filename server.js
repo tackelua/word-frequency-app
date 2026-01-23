@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { parseFile } = require('./src/parsers');
-const { analyzeWordFrequency } = require('./src/analyzer');
+const { analyzeWordFrequency, extractContexts } = require('./src/analyzer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -68,6 +68,126 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Word Frequency Analyzer API' });
 });
 
+// In-memory cache for analysis results
+const resultsCache = new Map();
+
+
+// Status endpoint for polling
+app.get('/api/analysis/:fileId', (req, res) => {
+    const { fileId } = req.params;
+    const result = resultsCache.get(fileId);
+
+    if (!result) {
+        return res.status(404).json({ error: 'Analysis not found' });
+    }
+
+    res.json(result);
+});
+
+// Delete analysis result (stops processing if in queue)
+app.delete('/api/analysis/:fileId', (req, res) => {
+    const { fileId } = req.params;
+    if (resultsCache.has(fileId)) {
+        console.log(`🗑️ Deleting analysis for fileId: ${fileId}`);
+        resultsCache.delete(fileId);
+        res.json({ success: true, message: 'Analysis removed' });
+    } else {
+        res.status(404).json({ error: 'Analysis not found' });
+    }
+});
+
+const crypto = require('crypto');
+
+// Helper: Calculate file hash
+function calculateFileHash(filePath) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash('md5');
+        const stream = fs.createReadStream(filePath);
+
+        stream.on('data', data => hash.update(data));
+        stream.on('end', () => resolve(hash.digest('hex')));
+        stream.on('error', err => reject(err));
+    });
+}
+
+// --- Sequential Context Extraction Queue ---
+const analysisQueue = [];
+let activeWorkers = 0;
+const MAX_CONCURRENT = 2;
+
+async function processNextInQueue() {
+    if (activeWorkers >= MAX_CONCURRENT || analysisQueue.length === 0) {
+        return;
+    }
+
+    activeWorkers++;
+    const task = analysisQueue.shift();
+    const { fileId, fileName, fileHash, cachePath, fullCachePath } = task;
+
+    try {
+        console.log(`\n🧵 [Queue] [Worker ${activeWorkers}] Starting context extraction for: ${fileName}`);
+        const contextStart = Date.now();
+
+        const result = resultsCache.get(fileId);
+        if (!result || result.status === 'complete') {
+            return; // Finally block handles decrement and next trigger
+        }
+
+        const text = await fs.promises.readFile(cachePath, 'utf8');
+        const analysis = result.analysis;
+
+        const topWords = analysis.results
+            .slice(0, 1000)
+            .map(item => item.word);
+
+        const contextMap = await extractContexts(text, topWords, {
+            caseSensitive: false,
+            checkAbort: () => !resultsCache.has(fileId) // If removed from cache, abort
+        });
+
+        if (contextMap === null) {
+            console.log(`🛑 [Queue] Cancelled mid-process for: ${fileName}`);
+            return;
+        }
+
+        analysis.results.forEach(item => {
+            if (contextMap.has(item.word)) {
+                item.context = contextMap.get(item.word);
+            }
+        });
+
+        resultsCache.set(fileId, {
+            status: 'complete',
+            fileName,
+            analysis
+        });
+
+        // Save to JSON cache
+        await fs.promises.writeFile(fullCachePath, JSON.stringify(analysis));
+        console.log(`💾 [Queue] Saved full analysis to cache: ${fileHash}`);
+        console.log(`✅ [Queue] Finished ${fileName} in ${((Date.now() - contextStart) / 1000).toFixed(2)}s`);
+
+    } catch (err) {
+        console.error(`❌ [Queue] Failed for ${fileName}:`, err);
+        const result = resultsCache.get(fileId);
+        if (result) {
+            resultsCache.set(fileId, {
+                status: 'error',
+                error: err.message,
+                fileName,
+                analysis: result.analysis
+            });
+        }
+    } finally {
+        activeWorkers--;
+        // Trigger next task as soon as one worker is free
+        processNextInQueue();
+    }
+
+    // Attempt to start another worker if we have capacity
+    processNextInQueue();
+}
+
 // File upload and analysis endpoint
 app.post('/api/upload', upload.single('file'), async (req, res) => {
     try {
@@ -77,53 +197,158 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
         const filePath = req.file.path;
         const fileName = req.file.originalname;
+        const fileId = req.file.filename;
 
-        // Parse file
-        const parseStart = Date.now();
-        console.log(`📄 Parsing file: ${fileName}...`);
-        const text = await parseFile(filePath, req.file.mimetype);
-        console.log(`✓ Parsed in ${((Date.now() - parseStart) / 1000).toFixed(2)}s`);
+        // 0. Calculate Hash & Check Cache
+        const fileHash = await calculateFileHash(filePath);
+        const cacheDir = path.join(__dirname, 'uploads', 'cache');
+        try {
+            await fs.promises.access(cacheDir);
+        } catch {
+            await fs.promises.mkdir(cacheDir, { recursive: true });
+        }
+
+        const cachePath = path.join(cacheDir, `${fileHash}.txt`);
+        const fullCachePath = path.join(cacheDir, `${fileHash}.json`);
+        let text = '';
+
+        // 1. Check Full Result Cache (INSTANT RESPONSE)
+        let hasFullCache = false;
+        try {
+            await fs.promises.access(fullCachePath);
+            hasFullCache = true;
+        } catch { }
+
+        if (hasFullCache) {
+            console.log(`🚀 Full analysis cache hit for ${fileName} (${fileHash})`);
+            const fileContent = await fs.promises.readFile(fullCachePath, 'utf8');
+            const analysis = JSON.parse(fileContent);
+
+            // Clean up original upload
+            if (fs.existsSync(filePath)) await fs.promises.unlink(filePath);
+
+            resultsCache.set(fileId, {
+                status: 'complete',
+                fileName,
+                analysis
+            });
+
+            return res.json({
+                success: true,
+                fileName,
+                fileId,
+                analysis,
+                status: 'complete'
+            });
+        }
+
+        // 2. Check Text Cache
+        let hasTextCache = false;
+        try {
+            await fs.promises.access(cachePath);
+            hasTextCache = true;
+        } catch { }
+
+        if (hasTextCache) {
+            console.log(`⚡ Text cache hit for ${fileName} (${fileHash}). Reading text...`);
+            text = await fs.promises.readFile(cachePath, 'utf8');
+        } else {
+            // Parse file
+            const parseStart = Date.now();
+            console.log(`📄 Parsing file: ${fileName}...`);
+            text = await parseFile(filePath, req.file.mimetype);
+            console.log(`✓ Parsed in ${((Date.now() - parseStart) / 1000).toFixed(2)}s`);
+
+            // Save to cache
+            if (text && text.trim().length > 0) {
+                await fs.promises.writeFile(cachePath, text);
+                console.log(`💾 Saved parsed text to cache: ${fileHash}`);
+            }
+        }
+
+        // Clean up original upload after parsing/cache check
+        if (fs.existsSync(filePath)) await fs.promises.unlink(filePath);
 
         if (!text || text.trim().length === 0) {
-            // Clean up uploaded file
-            fs.unlinkSync(filePath);
             return res.status(400).json({ error: 'No text content found in file' });
         }
 
-        // Analyze word frequency
+        // 3. Immediate Analysis (Counts only)
         const analyzeStart = Date.now();
-        console.log(`📊 Analyzing word frequency...`);
-        const analysis = analyzeWordFrequency(text, {
-            minLength: 3,  // Minimum 3 letters for meaningful vocabulary
-            maxResults: Infinity,  // No limit on results
+        console.log(`📊 Analyzing word frequency (counts only)...`);
+
+        const analysis = await analyzeWordFrequency(text, {
+            minLength: 3,
+            maxResults: Infinity,
             caseSensitive: false,
-            includeStopwords: false
+            includeStopwords: false,
+            skipContext: true
         });
-        console.log(`✓ Analyzed ${analysis.uniqueWords} unique words in ${((Date.now() - analyzeStart) / 1000).toFixed(2)}s`);
 
-        // Clean up uploaded file
-        fs.unlinkSync(filePath);
+        console.log(`✓ Analyzed counts for ${fileName} in ${((Date.now() - analyzeStart) / 1000).toFixed(2)}s`);
 
-        // Return results
+        resultsCache.set(fileId, {
+            status: 'processing',
+            fileName,
+            analysis,
+            // Meta for deferred processing
+            fileHash,
+            cachePath,
+            fullCachePath
+        });
+
         res.json({
             success: true,
             fileName,
-            analysis
+            fileId,
+            analysis,
+            status: 'processing'
         });
+
+        // NOTE: We NO LONGER start background context extraction here.
+        // It must be triggered via /api/analysis/process-batch
 
     } catch (error) {
         console.error('Error processing file:', error);
-
-        // Clean up file on error
-        if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
+        if (req.file) {
+            try {
+                await fs.promises.access(req.file.path);
+                await fs.promises.unlink(req.file.path);
+            } catch { }
         }
-
-        res.status(500).json({
-            error: 'Failed to process file',
-            message: error.message
-        });
+        res.status(500).json({ error: 'Failed to process file', message: error.message });
     }
+});
+
+// Trigger batch context extraction
+app.post('/api/analysis/process-batch', async (req, res) => {
+    const { fileIds } = req.body;
+    if (!fileIds || !Array.isArray(fileIds)) {
+        return res.status(400).json({ error: 'Invalid fileIds array' });
+    }
+
+    console.log(`\n📥 Received batch process request for ${fileIds.length} files`);
+
+    let addedCount = 0;
+    fileIds.forEach(fileId => {
+        const result = resultsCache.get(fileId);
+        if (result && result.status === 'processing') {
+            analysisQueue.push({
+                fileId,
+                fileName: result.fileName,
+                fileHash: result.fileHash,
+                cachePath: result.cachePath,
+                fullCachePath: result.fullCachePath
+            });
+            addedCount++;
+        }
+    });
+
+    if (addedCount > 0) {
+        processNextInQueue();
+    }
+
+    res.json({ success: true, queued: addedCount });
 });
 
 // Start server

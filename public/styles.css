@@ -1507,3 +1507,53 @@ body {
   border: none;
   cursor: pointer;
 }
+
+/* Status Icons & Background Analysis Messaging */
+.status-icon {
+  font-size: 0.9rem;
+  margin-right: 6px;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.spinner-dot {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(167, 139, 250, 0.2);
+  border-top-color: #a78bfa;
+  border-radius: 50%;
+  animation: spin-simple 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin-simple {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.status-icon.complete {
+  color: #10b981;
+}
+
+.status-icon.error {
+  color: #ef4444;
+}
+
+.context-item.info-message {
+  background: rgba(102, 126, 234, 0.1) !important;
+  border-left: 4px solid #667eea !important;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  color: #a8a8b3;
+}
+
+.context-item.info-message .spinner-dot {
+  width: 18px;
+  height: 18px;
+}

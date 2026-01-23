@@ -34,6 +34,15 @@ function init() {
         // Select all files by default
         selectedFiles = new Set(Object.keys(filesData));
         showResults();
+
+        // Resume polling for processing files
+        Object.values(filesData).forEach(file => {
+            if (file.status === 'processing' && file.fileId) {
+                fetchContexts(file.fileId, file.fileName);
+            }
+        });
+    } else {
+        resetUpload();
     }
 }
 
@@ -93,13 +102,21 @@ async function processFiles(files) {
 
     console.log(`📤 Starting parallel upload of ${validFiles.length} files...`);
 
+    const uploadedFileIds = [];
+
     try {
         await Promise.all(validFiles.map(async (file) => {
             const fileStartTime = Date.now();
             try {
-                await uploadSingleFile(file);
+                const data = await uploadSingleFile(file);
+                if (data && data.status === 'processing') {
+                    uploadedFileIds.push(data.fileId);
+                }
                 const fileTime = ((Date.now() - fileStartTime) / 1000).toFixed(2);
                 console.log(`✅ ${file.name} processed in ${fileTime}s`);
+
+                // NEW: Incremental UI Update
+                renderIncrementalResults();
             } catch (err) {
                 console.error(`❌ Failed to process ${file.name}:`, err);
                 showError(`Failed to process ${file.name}`);
@@ -110,12 +127,25 @@ async function processFiles(files) {
         }));
 
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
-        console.log(`🎉 All ${validFiles.length} files processed in ${totalTime}s`);
+        console.log(`🎉 All ${validFiles.length} files uploaded in ${totalTime}s`);
+
+        // Trigger batch context extraction AFTER all uploads are done
+        if (uploadedFileIds.length > 0) {
+            console.log(`🚀 Triggering batch context extraction for ${uploadedFileIds.length} files...`);
+            fetch('/api/analysis/process-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileIds: uploadedFileIds })
+            }).catch(err => console.error('Failed to trigger batch processing:', err));
+        }
 
         showResults();
 
     } catch (error) {
         console.error('Batch processing error:', error);
+        // Explicitly cleanup any files that might have been partially added/errored
+        updateFileSelector();
+        updateStats();
         resetUpload();
     }
 }
@@ -136,24 +166,111 @@ async function uploadSingleFile(file) {
 
     const data = await response.json();
 
+    // Store immediate results
     filesData[data.fileName] = {
         fileName: data.fileName,
+        fileId: data.fileId,
         analysis: data.analysis,
-        uploadedAt: new Date().toISOString()
+        uploadedAt: new Date().toISOString(),
+        status: data.status || 'processing' // Check if already complete from cache
     };
     saveFilesData();
 
     // Auto-select new file
     selectedFiles.add(data.fileName);
+
+    // Start polling if still processing
+    if (filesData[data.fileName].status === 'processing') {
+        fetchContexts(data.fileId, data.fileName);
+    }
+
+    return data;
+}
+
+async function fetchContexts(fileId, fileName) {
+    if (!fileId) return;
+
+    const pollInterval = setInterval(async () => {
+        try {
+            const res = await fetch(`/api/analysis/${fileId}`);
+            if (!res.ok) {
+                if (res.status === 404) clearInterval(pollInterval);
+                return;
+            }
+
+            const data = await res.json();
+
+            if (data.status === 'complete') {
+                clearInterval(pollInterval);
+                console.log(`✅ Contexts loaded for ${fileName}`);
+
+                // Update with full data
+                filesData[fileName] = {
+                    ...filesData[fileName],
+                    analysis: data.analysis,
+                    status: 'complete'
+                };
+                saveFilesData();
+
+                // Refresh UI
+                updateFileSelector();
+                if (selectedFiles.has(fileName)) {
+                    renderWordCloud();
+                    renderTable();
+                }
+
+                showSuccess(`Analysis complete for ${fileName}`);
+            } else if (data.status === 'error') {
+                clearInterval(pollInterval);
+                console.error(`❌ Context analysis failed for ${fileName}: ${data.error}`);
+
+                // Cleanup: Remove failed file from local state
+                delete filesData[fileName];
+                selectedFiles.delete(fileName);
+                saveFilesData();
+
+                // Refresh UI to hide the failed file
+                renderIncrementalResults();
+                showError(`Removed failed file ${fileName}: ${data.error}`);
+            }
+        } catch (err) {
+            console.error('Polling error:', err);
+        }
+    }, 2000); // Poll every 2 seconds
 }
 
 // ==========================================
 // Results Display
 // ==========================================
 function showResults() {
-    uploadCard.style.display = 'none';
-    resultsSection.style.display = 'block';
+    const resultsContent = document.getElementById('resultsContent');
+    const actionSection = document.querySelector('.action-section');
+    const uploadCard = document.querySelector('.upload-card');
 
+    uploadCard.style.display = 'none';
+    if (resultsContent) resultsContent.style.display = 'block';
+    if (actionSection) actionSection.style.display = 'block';
+
+    updateFileSelector();
+    updateStats();
+    renderWordCloud();
+    renderTable();
+}
+
+/**
+ * Refreshes the UI results without hiding the upload progress card
+ * Useful for incremental multi-file processing
+ */
+function renderIncrementalResults() {
+    const resultsContent = document.getElementById('resultsContent');
+    const actionSection = document.querySelector('.action-section');
+
+    // Ensure results container is visible
+    resultsSection.style.display = 'block';
+    if (resultsContent) resultsContent.style.display = 'block';
+    if (actionSection) actionSection.style.display = 'block';
+
+    // Refresh data views
     updateFileSelector();
     updateStats();
     renderWordCloud();
@@ -179,12 +296,25 @@ function updateFileSelector() {
 
     // Individual file checkboxes
     files.forEach(fileName => {
+        const file = filesData[fileName];
+        const status = file.status || 'complete'; // Default to complete for old files
         const checked = selectedFiles.has(fileName);
         const shortName = fileName.length > 20 ? fileName.substring(0, 20) + '...' : fileName;
+
+        let statusIcon = '';
+        if (status === 'processing') {
+            statusIcon = '<span class="status-icon" title="Analyzing context..."><div class="spinner-dot"></div></span>';
+        } else if (status === 'complete' && checked) {
+            statusIcon = '<span class="status-icon" title="Analysis complete">✅</span>';
+        } else if (status === 'error') {
+            statusIcon = '<span class="status-icon error" title="Analysis failed">❌</span>';
+        }
+
         html += `
-      <div class="file-chip ${checked && !showSavedOnly ? 'active' : ''}">
+      <div class="file-chip ${checked && !showSavedOnly ? 'active' : ''} ${status}">
         <label class="file-label" title="${fileName}">
           <input type="checkbox" value="${fileName}" ${checked && !showSavedOnly ? 'checked' : ''} onchange="toggleFile('${fileName}', this.checked)">
+          ${statusIcon}
           <span>${shortName}</span>
         </label>
         <button class="delete-file-btn" onclick="deleteFile('${fileName}')" title="Remove file">×</button>
@@ -255,6 +385,13 @@ window.toggleSavedOnly = toggleSavedOnly;
 
 function deleteFile(fileName) {
     if (!confirm(`Remove "${fileName}" from analysis?`)) return;
+
+    // Notify server to cancel/remove analysis
+    const fileInfo = filesData[fileName];
+    if (fileInfo && fileInfo.fileId) {
+        fetch(`/api/analysis/${fileInfo.fileId}`, { method: 'DELETE' })
+            .catch(err => console.error('Failed to notify server of deletion:', err));
+    }
 
     delete filesData[fileName];
     selectedFiles.delete(fileName);
@@ -349,10 +486,6 @@ function renderWordCloud() {
     const paddingX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
 
     // Use container.clientWidth for inner width excluding border, then subtract padding
-    // However, if container is a block with padding, clientWidth INCLUDES padding in some box-sizing models?
-    // Standard: clientWidth = width + padding. offsetWidth = width + padding + border.
-    // If box-sizing: border-box, width style property includes padding.
-    // Safest: Use getBoundingClientRect().width and subtract padding.
     const rect = container.getBoundingClientRect();
     const width = rect.width - paddingX;
 
@@ -565,12 +698,22 @@ async function showContext(word) {
     list.innerHTML = '<div class="loading">Loading details...</div>';
     modal.style.display = 'flex';
 
+    // Check if any selected file is still processing
+    const processingFiles = Object.values(filesData).filter(f => selectedFiles.has(f.fileName) && f.status === 'processing');
+
     const contexts = item.context || [];
     let contextHtml = '';
 
     // Prepare Context HTML
     contextHtml += '<div class="section-title">Context Examples</div>';
-    if (contexts.length === 0) {
+
+    if (processingFiles.length > 0 && contexts.length === 0) {
+        contextHtml += `
+            <div class="context-item info-message">
+                <div class="spinner-dot"></div>
+                Analysis in progress... Context examples will appear shortly.
+            </div>`;
+    } else if (contexts.length === 0) {
         contextHtml += '<div class="context-item">No context examples found for this word.</div>';
     } else {
         contexts.forEach(sentence => {
@@ -704,11 +847,27 @@ function showSuccess(message) {
 }
 
 function resetUpload() {
-    resultsSection.style.display = 'none';
+    const resultsContent = document.getElementById('resultsContent');
+    const actionSection = document.querySelector('.action-section');
+    const hasData = Object.keys(filesData).length > 0;
+
+    if (hasData) {
+        if (resultsContent) resultsContent.style.display = 'block';
+        if (actionSection) actionSection.style.display = 'block';
+    } else {
+        if (resultsContent) resultsContent.style.display = 'none';
+        if (actionSection) actionSection.style.display = 'none';
+    }
+
     uploadCard.style.display = 'block';
     uploadZone.style.display = 'block';
     uploadProgress.style.display = 'none';
     fileInput.value = '';
+
+    // Scroll to upload zone if results are visible
+    if (hasData) {
+        uploadCard.scrollIntoView({ behavior: 'smooth' });
+    }
 }
 
 function saveFilesData() {
@@ -719,8 +878,10 @@ function saveSavedWords() {
     localStorage.setItem('wfa_saved', JSON.stringify(savedWords));
 }
 
-// Initialize
-init();
+// Initialize app when DOM is fully loaded to prevent browser "loading" hang
+document.addEventListener('DOMContentLoaded', () => {
+    init();
+});
 
 // ==========================================
 // Flashcards & SRS System
