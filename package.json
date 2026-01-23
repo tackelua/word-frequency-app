@@ -4,7 +4,7 @@
   "description": "Modern web app for analyzing word frequency in documents",
   "main": "server.js",
   "scripts": {
-    "dev": "node server.js",
+    "dev": "nodemon server.js",
     "start": "node server.js",
     "stop": "lsof -ti:3000 | xargs kill -9 || echo 'No process on port 3000'"
   },
@@ -28,5 +28,8 @@
     "pdf-parse": "^1.1.1",
     "sequelize": "^6.37.7",
     "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }

@@ -9,7 +9,7 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 COPY --chown=nodejs:nodejs package*.json ./
 
 # Install dependencies
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci && npm cache clean --force
 
 # Copy application code
 COPY --chown=nodejs:nodejs . .

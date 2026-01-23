@@ -10,6 +10,9 @@ services:
     env_file:
       - .env
     volumes:
+      - .:/app
+      - /app/node_modules
       - ./data:/app/data
       - ./logs:/app/logs
+    command: npm run dev
     restart: always
