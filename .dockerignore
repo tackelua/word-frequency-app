@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+*.md
+.env.example
+logs/*
+data/*
+!logs/.gitkeep
+!data/.gitkeep
+service-install.sh
+service-uninstall.sh

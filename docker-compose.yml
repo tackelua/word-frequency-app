@@ -1,0 +1,15 @@
+services:
+  word-analyzer:
+    build: .
+    image: githsoft/word-frequency-analyzer:latest
+    container_name: word-frequency-analyzer
+    ports:
+      - "4001:4001"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: always
