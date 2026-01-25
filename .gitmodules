@@ -1,0 +1,3 @@
+[submodule "lib/port-manager"]
+	path = lib/port-manager
+	url = https://github.com/tackelua/port-manager.git
