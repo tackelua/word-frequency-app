@@ -6,8 +6,10 @@ const fs = require('fs');
 const { parseFile } = require('./src/parsers');
 const { analyzeWordFrequency, extractContexts } = require('./src/analyzer');
 
+const { registerPort } = require('./lib/port-manager');
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+let PORT = process.env.PORT || 3000;
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -360,7 +362,16 @@ app.post('/api/analysis/process-batch', async (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
-    console.log(`📊 Upload files to analyze word frequency`);
-});
+async function start() {
+    try {
+        PORT = await registerPort();
+    } catch (e) {
+        console.error('[PortManager] Failed to register port, using default:', PORT);
+    }
+    app.listen(PORT, () => {
+        console.log(`🚀 Server running at http://localhost:${PORT}`);
+        console.log(`📊 Upload files to analyze word frequency`);
+    });
+}
+
+start().catch(console.error);
