@@ -48,7 +48,15 @@ const upload = multer({
 });
 
 // Serve static files
-app.use(express.static('public'));
+// TODO: Remove no-cache headers in production. Only needed for hot reload during development via tunnel.
+// Serve static files with no-cache headers for "hot reload" over tunnel
+app.use(express.static('public', {
+    setHeaders: (res, path) => {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+    }
+}));
 app.use(express.json());
 
 // Routes
